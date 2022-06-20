@@ -1,0 +1,121 @@
+###Código para la creación del wordcloud###
+
+##Para leer el documento pdf
+
+#importing packages
+import pdfminer
+import io
+from pdfminer.converter import TextConverter
+from pdfminer.pdfinterp import PDFPageInterpreter
+from pdfminer.pdfinterp import PDFResourceManager
+from pdfminer.pdfpage import PDFPage
+
+#defining function 
+def extract_text_from_pdf(pdf_path):
+    resource_manager = PDFResourceManager()
+    fake_file_handle = io.StringIO()
+    converter = TextConverter(resource_manager, fake_file_handle)
+    page_interpreter = PDFPageInterpreter(resource_manager, converter)
+    with open(pdf_path, 'rb') as fh:
+        for page in PDFPage.get_pages(fh, 
+                                      caching=True,
+                                      check_extractable=True):
+            page_interpreter.process_page(page)
+        texto = fake_file_handle.getvalue()
+    # close open handles
+    converter.close()
+    fake_file_handle.close()
+    if texto:
+        return texto
+        
+texto = extract_text_from_pdf(r'yachay/constitucion/BorradorConstitucion.pdf')
+
+##Para el procesamiento del texto dentro del pdf
+
+#Librerías básicas utilizadas
+import numpy as np
+import pandas as pd
+
+#Librerías necesarias para scrapear textos de páginas web
+import requests
+from bs4 import BeautifulSoup
+
+#Librerías necesarias para abrir imágenes, generar nube de palabras y plot
+from PIL import Image
+from wordcloud import WordCloud, ImageColorGenerator
+import matplotlib.pyplot as plt
+
+#Librerías necesarias para la limpieza de datos
+import string
+import nltk
+from nltk.corpus import stopwords
+
+#Generación de lista de signos de puntuación
+punctuation=[]
+for s in string.punctuation:
+    punctuation.append(str(s))
+sp_punctuation = ["¿", "¡", "“", "”", "…", ":", "–", "»", "«"]    
+punctuation += sp_punctuation
+
+#nltk.download('stopwords') #La primera vez debemos descargar las "stopwords"
+stop_words = stopwords.words('spanish') #Listado de palabras a eliminar
+stop_words += ["artículo", "para", "como", "puede","cómo", "hacer", "forma", "parte", "hace",
+               "además", "según", "pueden", "ser", "así", "podrá", "deberá", "podrán", "demás", 
+              "deberán"] #Añadimos algunos caractéres que hemos encontrado
+              
+#Reemplazamos signos de puntuación por "":
+for p in punctuation:
+    clean_texto = texto.lower().replace(p,"")
+for p in punctuation:
+    clean_texto = clean_texto.replace(p,"")
+
+#Eliminamos espacios blancos, saltos de línea, tabuladores, etc    
+#clean_texto = " ".join(clean_texto.split())    
+
+#Reemplazamos stop_words por "":    
+for stop in stop_words:
+    clean_texto_list = clean_texto.split()
+    clean_texto_list = [i.strip() for i in clean_texto_list]
+    try:
+        while stop in clean_texto_list: clean_texto_list.remove(stop)
+    except:
+        print("Error")
+        pass
+    clean_texto= " ".join(clean_texto_list)     
+    
+lista_texto = clean_texto.split(" ")
+
+palabras = []
+#Paso intermedio para eliminar palabras muy cortas (emoticonos,etc) y muy largas (ulr o similar) que se nos hayan pasado:
+for palabra in lista_texto:
+    if (len(palabra)>=3 and len(palabra)<18):
+        palabras.append(palabra)    
+        
+#Generamos un diccionario para contabilizar las palabras:
+word_count={}
+for palabra in palabras:
+    if palabra in word_count.keys():
+        word_count[palabra][0]+=1
+    else:
+        word_count[palabra]=[1]
+        
+#Generamos un DF con la frecuencia de cada palabra y lo ordenamos:
+df = pd.DataFrame.from_dict(word_count).transpose()
+df.columns=["freq"]
+df.sort_values(["freq"], ascending=False, inplace=True)
+df.head(10)        
+
+##Realizamos el wordcloud
+
+word_cloud = WordCloud(height=800, width=1000, background_color='white',max_words=60,
+                       min_font_size=5, collocation_threshold=30, collocations=False).generate(clean_texto) 
+
+fname = "WordCloud_Constitución"
+plt.imshow(word_cloud, interpolation="bilinear") 
+plt.axis("off")
+fig = plt.gcf() #get current figure
+fig.set_size_inches(10,8)  
+plt.savefig(fname, dpi=700)
+              
+
+        
